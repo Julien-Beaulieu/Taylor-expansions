@@ -1,0 +1,184 @@
+---
+title: "Using Taylor Expansions to fit power law functions"
+author: "Julien Beaulieu, Maria Gheta and Andrew McDonald"
+date: "2024-09-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+Power laws are functions explaining wide spread natural processes ranging from metabolic rates, population density, or even environmental DNA concentrations. This vignette explains how to use Taylor Expansions for the first moment to parameterize power law functions in R with BRMS. 
+  
+  
+Consider the simple power law relationship:  
+$$
+\begin{aligned} 
+f(x_i) = \kappa x_i^b
+\end{aligned}
+$$  
+This could express the metabolic rate of an individual, where $x_i$ is individual $i$'s mass, $\kappa$ is a scaling constant, and $b$ is the allometric constant.   
+If we were interested in the total metabolic rate of the population of size $N$, we would consider:   
+$$
+\begin{aligned}
+\sum_{i=1}^Nf(x_i) = \sum_{i=1}^N(\kappa x_i^b)
+\end{aligned}
+$$  
+The difficulty fitting such a function comes from the presence of the summation which cannot be handled by most statistical packages.   Another issue is the case where one would like to isolate the number of individuals in the population, $N$. To alleviate these problems, we can use the power of mathematics!  
+The Taylor expansion for the first moment of functions of random variables is a possible tool, with the conditions that :  
+
+  1. $x$ is a random variable  
+  2. Each $x_i$ is a 1D value 
+  3. The mean $\mu$ and the variance $\sigma^2$ of $x$ can be estimated from the data
+  
+If these conditions are met, we can apply the following approximation :  
+$$
+\begin{aligned}\sum_{i=1}^N\kappa x_i^b \approx N\kappa(\mu^b + \frac{\sigma^2}{2}b(b-1)\mu^{b-2})
+\end{aligned}
+$$  
+This approximation can easily be fitted in the BRMS package and allows to isolate $N$, as we will show in the example later on. But before, we will get into the knitty gritty of the math behind this approximation. 
+
+## Explanation of approximation
+Starting with the Taylor approximation of a generic $f(x)$, centered about $x=\mu$, up to second order, we have:   
+$$
+\begin{aligned}
+f(x) &\approx f(\mu) + f'(\mu)(x-\mu) + \frac{1}{2}f''(\mu)(x-\mu)^2
+\end{aligned}
+$$  
+Taking the expected value of both sides of the equality, we obtain:   
+$$
+\begin{aligned}
+E[f(x)] &\approx E[f(\mu) + f'(\mu)(x-\mu) + \frac{1}{2}f''(\mu)(x-\mu)^2]
+\end{aligned}
+$$  
+Applying the distributivity of the expected value:  
+$$
+\begin{aligned}E[f(x)] &\approx E[f(\mu)] + E[f'(\mu)(x-\mu)] + E[\frac{1}{2}f''(\mu)(x-\mu)^2]
+\end{aligned}
+$$  
+Where the constants can be extracted from the expected value:   
+$$
+\begin{aligned}
+E[f(x)] &\approx f(\mu) + f'(\mu)E[(x-\mu)] + \frac{1}{2}f''(\mu)E[(x-\mu)^2]
+\end{aligned}
+$$   
+Finally, we have that $E[x-\mu] = 0$, and $E[(x-\mu)^2] = \sigma^2$, giving  
+$$
+\begin{aligned}
+E[f(x)]  &\approx f(\mu) + \frac{\sigma^2}{2}f''(\mu)
+\end{aligned}
+$$  
+Now, substituting in $f(x) = \kappa x ^b$, and using the fact that $f''(x=\mu) = b(b-1)\mu^{b-2}$ we have:  
+$$\begin{aligned}
+E[\kappa x ^b]  &\approx\kappa\mu^b + \kappa\frac{\sigma^2}{2}b(b-1)\mu^{b-2}
+\end{aligned}
+$$   
+  
+Applying the summation from $i=1$ to $N$, to scale up from indivdual to population level, we obtain:  
+$$
+\begin{aligned}
+\sum_{i=1}^N(\kappa x_i^b) &\approx \sum_{i=1}^N(\kappa\mu^b + \kappa\frac{\sigma^2}{2}b(b-1)\mu^{b-2})
+\end{aligned}
+$$  
+Applying the distributivity of the summation, we have:  
+$$
+\begin{aligned}
+\sum_{i=1}^N(\kappa x_i^b) &\approx \sum_{i=1}^N(\kappa\mu^b) + \sum_{i=1}^N(\kappa\frac{\sigma^2}{2}b(b-1)\mu^{b-2})
+\end{aligned}
+$$ 
+Where the values in the parentheses on the right hand side are all constants with respect to $i$, and $\sum_{i=1}^N1 = N$, giving:   
+$$
+\begin{aligned} 
+\sum_{i=1}^N(\kappa x_i^b) &\approx N\kappa\mu^b + N\kappa\frac{\sigma^2}{2}b(b-1)\mu^{b-2} = N\kappa(\mu^b + \frac{\sigma^2}{2}b(b-1)\mu^{b-2})
+\end{aligned}
+$$
+
+
+## R Example
+
+### Context and model
+
+Let's consider the hypothetical case where we want to model fish abundance of a population as a function of the concentration of environmental DNA (eDNA) in lakes. Previous research showed that eDNA production scales allometrically with fish mass. This means that in its simplest form this relationship can be represented by:
+$$
+[eDNA] \sim I_0 \sum_{i=1}^N(M_i^b)
+$$
+Where $[eDNA]$ is the eDNA concentration, $I_0$ is a scaling coefficient, $N$ is the total fish abundance, $b$ is the allometric scaling coefficient, and $M_i$ is the mass of the $i$th fish. In this case we have data on $N$, the water eDNA concentration, and the mean and variance of the population's mass. $I_0$ and $b$ are parameters to be estimated by the model. This function can be aproximated to a form much easier to fit and where $N$ can be isolated by applying the Taylor expansions explained above such that:
+$$
+[eDNA] \sim I_0N(\overline{M}^b + \frac{\sigma_M^2}{2}b(b-1)\overline{M}^{b-2}) 
+$$
+Where $\overline{M}$ is the mean mass of the fish population, and $\sigma_M$ is the variance. The lake size also needs to be acountted for as the eDNA measure is a concentration. The equation then becomes :
+$$
+\frac{N}{area} \sim \frac{[eDNA]}{I_0(\overline{M}^b + \frac{\sigma_M^2}{2}b(b-1)\overline{M}^{b-2})}
+$$
+Where $area$ is the area of the lake.   
+Now that we have the model we want, let's fit it.
+
+### Preparing data and library
+#### Library
+```{r echo=T, results='hide', warning=FALSE, message=FALSE}
+library(dplyr)
+library(brms)
+library(ggplot2)
+```
+
+#### Data
+The data used are from Yates et al. (2020).
+```{r echo=T, results='hide', warning=FALSE}
+data <- as.data.frame(matrix(ncol = 4, nrow = 9)) %>% 
+  rename("eDNA"=V1, "N_per_ha"=V2,"mean_M"=V3, "var_M"=V4) %>% 
+  mutate(eDNA = c(592.2,5131.1,2445.9,1240.4,3050.5,797.5, 7805.1, 917.4, 1530.6)) %>% 
+  mutate(N_per_ha = c(63,284,225,112,121,119,1131,211,509)) %>% 
+  mutate(mean_M = c(404.82,184.7,68.92,112.28,137.28,141.89,43.12,96.11,50.70)) %>% 
+  mutate(var_M = c(17205.56,7167.08,1366.25,5353.76,5062.28,19279.91,505.63,26678.43,404.95))
+```
+### Define the model
+
+```{r echo=TRUE, results='hide'}
+mod <- bf(N_per_ha ~ eDNA/(exp(logI0)*(mean_M^b+(var_M/2)*b*(b-1)*mean_M^(b-2))),
+          logI0 ~ 1,
+          b ~ 1,
+          nl = T,
+          family = gaussian())
+
+```
+### Set priors
+Here we will use informative priors to acount for known information on the fish metabolic rate and ensure the estimates are in the right order of magnitude.
+
+```{r echo=TRUE, results='hide', message=FALSE}
+prior <- c(prior(beta(0.7*4,(1-0.7)*4), nlpar = "b", lb=0, ub=1),
+           prior(normal(0,1), nlpar = "logI0", lb = 0),
+           prior(exponential(1), class = "sigma", lb = 0))
+```
+### Run the model
+```{r echo=TRUE, results='hide', message=FALSE}
+fit <- brm(formula = mod,
+           prior = prior,
+           data = data,
+           chains = 2,
+           cores = 2,
+           seed = 42,
+           control = list(adapt_delta = 0.99), #for convergence
+           iter = 3000)
+```
+
+### Check fit, convergence and outputs
+
+```{r}
+mcmc_plot(fit, type = "trace")
+mcmc_plot(fit, type = "hist")
+pp_check(fit)
+conditional_effects(fit, effects = "eDNA")
+
+```
+
+## Conclusion
+
+Taylor expansions provides an acurate and easy way to approximate power laws functions that are omnipresent in nature. 
+
+## References
+
+H. Benaroya, S. Mi Han, and M. Nagurka. 2005. Probability Models in Engineering and Science. CRC Press.p.125-195.
+
+M.C. Yates, D.M. Glaser, J.R. Post, M.E. Cristescu, D.J. Fraser, and A.M Derry. 2020. The relationship between eDNA particles concentration and organism abundance in nature is strenghtened by allometric scalling. Molecular Ecology, 13(3068-3082).
