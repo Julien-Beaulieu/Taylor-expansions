@@ -1,6 +1,6 @@
 ---
 title: "Using Taylor Expansions to fit power law functions"
-author: "Julien Beaulieu, Maria Gheta and Andrew McDonald"
+author: "Julien Beaulieu, Maria Gheta and A. Andrew M. MacDonald"
 date: "2024-09-26"
 output: html_document
 ---
@@ -10,7 +10,8 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ## Introduction
-Power laws are functions explaining wide spread natural processes ranging from metabolic rates, population density, or even environmental DNA concentrations. This vignette explains how to use Taylor Expansions for the first moment to parameterize power law functions in R with BRMS. 
+Power laws are functions used to describe widespread natural processes ranging from metabolic rates, population density, or even environmental DNA concentrations. However, ecologists must sometimes deal with situations where quantities are measured with error, or where information is only available on the mean and variance of the independent variable, rather than information on individuals in the population.
+In these situations, it is possible to approximate how a nonlinear function varies according to the mean and variance of the independent variable using Taylor expansions. This vignette explains how to use Taylor Expansions for the first moment to parameterize power law functions in R with BRMS. 
   
   
 Consider the simple power law relationship:  
@@ -158,7 +159,7 @@ fit <- brm(formula = mod,
            data = data,
            chains = 2,
            cores = 2,
-           seed = 42,
+           seed = 42, #This seed has all the answers
            control = list(adapt_delta = 0.99), #for convergence
            iter = 3000)
 ```
@@ -169,7 +170,7 @@ fit <- brm(formula = mod,
 mcmc_plot(fit, type = "trace")
 mcmc_plot(fit, type = "hist")
 pp_check(fit)
-conditional_effects(fit, effects = "eDNA")
+plot(conditional_effects(fit, effects = "eDNA"), points = TRUE)
 
 ```
 
